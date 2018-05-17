@@ -1,0 +1,146 @@
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
+#include <ArduinoJson.h>
+#include <ESP8266WiFi.h>
+#include <EEPROM.h>
+#include <Time.h>
+
+ESP8266WebServer server(80);
+void inicializar()
+{
+	configAP(1);														//1 indica AP activado, 0 AP desactivado
+
+}
+void configAP(int i)													//1 indica AP activado, 0 AP desactivado
+{									
+	if (i == 1)
+	{
+		if (EEPROM.read(0) != 1)
+		{
+			Serial.println(); Serial.println();
+			Serial.println("Inicia_ AP");
+			char c_ApSsid[14], c_ApPass[8];
+			int i_ApSsid = 0, i_ApPass = 0;
+			String s_ApSsid = "Wiicoon_";
+			s_ApSsid = s_ApSsid + WiFi.softAPmacAddress()[9]
+							+ WiFi.softAPmacAddress()[10]
+							+ WiFi.softAPmacAddress()[12]
+							+ WiFi.softAPmacAddress()[13]
+							+ WiFi.softAPmacAddress()[15]
+							+ WiFi.softAPmacAddress()[16];
+			i_ApSsid = s_ApSsid.length() + 1;
+			s_ApSsid.toCharArray(c_ApSsid, i_ApSsid);
+			String s_ApPass = getApPass(WiFi.softAPmacAddress());
+			i_ApPass = s_ApPass.length() + 1;
+			s_ApPass.toCharArray(c_ApPass, i_ApPass);
+			server.begin();
+			WiFi.softAP(c_ApSsid, c_ApPass);
+			EEPROM.write(0, 1);											//1 indica AP activado, 0 AP desactivado 
+			EEPROM.commit();
+		}
+	}
+	else
+	{
+		if (EEPROM.read(0) == 1)
+		{
+			Serial.println(); Serial.println();
+			Serial.println("Termina_ AP");
+			WiFi.softAPdisconnect(true);
+			EEPROM.write(0, 0);											//1 indica AP activado, 0 AP desactivado 
+			EEPROM.commit();
+		}
+	}
+}
+String getApPass(String s_macAddress)
+{
+	String s_pass = "";
+	int i_indice;
+	char c_caracteres[4];
+	i_indice = s_macAddress.lastIndexOf(":");
+	c_caracteres[0] = s_macAddress.charAt(i_indice - 2);
+	c_caracteres[1] = s_macAddress.charAt(i_indice - 1);
+	c_caracteres[2] = s_macAddress.charAt(i_indice + 1);
+	c_caracteres[3] = s_macAddress.charAt(i_indice + 2);
+	for (int i = 0; i < 4; i++)
+	{
+		switch (c_caracteres[i])
+		{
+		case '0': s_pass = s_pass + "00"; break;
+		case '1': s_pass = s_pass + "01"; break;
+		case '2': s_pass = s_pass + "02"; break;
+		case '3': s_pass = s_pass + "03"; break;
+		case '4': s_pass = s_pass + "04"; break;
+		case '5': s_pass = s_pass + "05"; break;
+		case '6': s_pass = s_pass + "06"; break;
+		case '7': s_pass = s_pass + "07"; break;
+		case '8': s_pass = s_pass + "08"; break;
+		case '9': s_pass = s_pass + "09"; break;
+		case 'A': s_pass = s_pass + "10"; break;
+		case 'B': s_pass = s_pass + "11"; break;
+		case 'C': s_pass = s_pass + "12"; break;
+		case 'D': s_pass = s_pass + "13"; break;
+		case 'E': s_pass = s_pass + "14"; break;
+		case 'F': s_pass = s_pass + "15"; break;
+		default:
+			break;
+		}
+	}
+	return s_pass;
+}
+void entregaDatos()
+{
+	Serial.println(); Serial.println();
+	Serial.println("Entrega_datos");
+	StaticJsonBuffer<500> jsonBuffer;
+	JsonObject& root = jsonBuffer.createObject();
+	String s_ApMacAddress = WiFi.softAPmacAddress();
+	String s_IpLocal = String(WiFi.localIP()[0]) + "."
+					 + String(WiFi.localIP()[1]) + "."
+					 + String(WiFi.localIP()[2]) + "."
+					 + String(WiFi.localIP()[3]);
+	Serial.println(s_IpLocal);
+	Serial.println(s_ApMacAddress);
+	root["macAddress"] = s_ApMacAddress;
+	if (WiFi.isConnected() == true)
+		root["ipAddress"] = s_IpLocal;
+	root["numSalidas"] = 6;
+	JsonArray& focos = root.createNestedArray("focos");
+	JsonObject& foco1 = focos.createNestedObject();
+	foco1["estado"];
+	foco1["numDeSalida"];
+	String s_myString;
+	root.prettyPrintTo(s_myString);
+	server.send(200, "application/json", s_myString);
+}
+void limpiaEeprom()
+{
+	entregaDatos();
+	for (int i = 0; i < 999; i++)
+		EEPROM.write(i, 255);
+	EEPROM.commit();
+}
+void leeprom()
+{
+	entregaDatos();
+	for (int i = 0; i < 999; i++)
+	{
+		Serial.print(i);
+		Serial.print(" ");
+		Serial.println(EEPROM.read(i));
+	}
+}
+void setup()
+{
+	Serial.begin(115200);
+	EEPROM.begin(2048);
+	limpiaEeprom();
+	server.begin();
+	inicializar();
+	server.on("/data_info", entregaDatos);
+	server.on("/leeprom", leeprom);
+}
+void loop()
+{
+	server.handleClient();
+	delay(100);
+}
